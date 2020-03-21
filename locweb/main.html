@@ -1,0 +1,115 @@
+<html>
+ <head>
+  <meta charset="utf-8">
+  <title>game</title>
+  <style>
+  </style>
+ </head>
+ <body>
+	<div  id="stat_g"></div>
+	<div id="score" style="visibility: hidden;">
+		<div><p style="display: inline;">Ваши очки: </p><p id="m_score" style="display: inline;"></p></div>
+		<div><p style="display: inline;">Очки противника: </p><p id="e_score" style="display: inline;"></p></div>
+		<div  id="stat_p"></div>
+	</div>
+	<div id="game" style="visibility: hidden;">
+		<div style="display: inline;">Выбери операцию:</div>
+		<select id="s_o" style="display: inline;">
+			<option>Сложение</option>
+			<option>Умножение</option>
+			<option>Вычетение</option>
+			<option>Возведение в степень</option>
+			<option>Остаток от делния</option>
+		</select>
+		<div style="display: inline;">Выбери число:</div>
+		<select id="s_n" style="display: inline;"></select>
+		<button id="but">Сделать ход</button>
+	</div>
+ </body>
+ <script>
+	function pow(x, n) {
+		let result = x;
+		for (let i = 1; i < n; i++) {
+			result *= x;
+		}
+		return result;
+	}
+	
+	function randomInteger(min, max) {
+		let rand = min - 0.5 + Math.random() * (max - min + 1);
+		return Math.round(rand);
+	}
+	
+	function par_i (string) {
+		let i = 0
+		let p_mas=[''];
+		for (let ch of string) {
+			if (ch=='_') {
+				if (p_mas[i]=='') {return null;}
+				p_mas.push('');
+				i++;
+			}else{
+				if (isFinite(p_mas[i])) {p_mas[i]+=ch;} else {return null;}
+			}
+		}
+		if (p_mas[i]=='') {return null;}
+		else {return p_mas;}
+	}
+	let r_int = new Set();
+	let socket = new WebSocket("ws://localhost:8081/");
+    window.onload = function(){
+		while (r_int.size<5) {
+			r_int.add(randomInteger(1,9));
+		}
+		
+		let one_option;
+		
+		for (i of r_int) {
+			let one_option = document.createElement('option');
+			one_option.innerHTML = i;
+			s_n.append(one_option);
+		}
+		
+		socket.onmessage = function(event) {
+			let dat = par_i(event.data);
+			if (dat[0] == 0) {stat_g.innerHTML = '<p style="color: red;">Второй пользователь не подключон</p>'}
+			if (dat[0] == 1) {
+				stat_g.innerHTML = '<p style="color: green;">Игра началась</p>';
+				score.style.visibility='visible';
+				m_score.innerHTML = dat[2];
+				e_score.innerHTML = dat[3];
+				if (dat[1] == 0) {stat_p.innerHTML = '<p style="color: green;">Ваш ход</p>';game.style.visibility='visible';}else{stat_p.innerHTML = '<p style="color: red;">Не ваш ход</p>';game.style.visibility='hidden';}
+			}
+		};
+		socket.onclose = function(event) {
+		if (event.wasClean) {
+			if (event.reason=="2") {
+				stat_g.innerHTML = '<p style="color: red;">Уже есть двое игроков</p>'
+			}
+			if (event.reason=="3") {
+				stat_g.innerHTML = '<p style="color: red;">Второй игрок отключился</p>'
+				score.style.visibility='hidden';
+				game.style.visibility='hidden';
+			}
+			let dat = par_i(event.reason);
+			if (dat[0]==4) {
+				stat_g.innerHTML = '<p style="color: green;">Вы выйграли</p>'
+				score.style.visibility='hidden';
+				game.style.visibility='hidden';
+				if (dat[1]==0) {stat_g.innerHTML = '<p style="color: green;">Вы выйграли</p>';}else{stat_g.innerHTML = '<p style="color: red;">Вы проиграли</p>';}
+			}
+		} else {
+			stat_g.innerHTML = '<p style="color: red;">Проблема с сервером</p>';
+			score.style.visibility='hidden';
+			game.style.visibility='hidden';
+		}
+		};
+    }
+	but.onclick = function() {
+		let id_o = s_o.selectedIndex;
+		let op = [x => Number(m_score.innerHTML) + x, x => Number(m_score.innerHTML) * x, x => Number(m_score.innerHTML) - x, x => pow(Number(m_score.innerHTML),x), x => Number(m_score.innerHTML) % x];
+		m_score.innerHTML = op[s_o.selectedIndex](Number(s_n.value));
+		socket.send(m_score.innerHTML+'_'+e_score.innerHTML);
+	}
+  </script>
+</html>

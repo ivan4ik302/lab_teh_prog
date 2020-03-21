@@ -1,0 +1,9 @@
+version: "3.3"
+
+services:
+  locweb:
+    build: locweb/
+    ports:
+      - 8000:8000
+      - 8081:8081
+
