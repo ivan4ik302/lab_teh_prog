@@ -1,13 +1,11 @@
 const http = require('http');
 const fs = require('fs');
-const parser = require('./parser');
 const WebSocketServer = new require('ws');
 const webSocketServer = new WebSocketServer.Server({
   port: 8081
 });
 
 console.log("Сервер запустился http://localhost:8000/");
-const users = new Set();
 let html;
 
 fs.readFile('./main.html', function (err, data) {
@@ -23,48 +21,82 @@ http.createServer(function(request, response) {
         response.end();
     }).listen(8000);
 
+let users = [];
+
+let out_message = {
+	users_s: [null,null],
+	progress_id: null,
+	win_id: null,
+	code: null	
+};
+
+Array.prototype.remove = function(value) {
+    var idx = this.indexOf(value);
+    if (idx != -1) {
+        return this.splice(idx, 1);
+    }
+    return this;
+}
+
 webSocketServer.on('connection', function(ws) {
-  if (users.size < 2) {
-	users.add(ws);
-	if (users.size == 1){ws.send("0");}
-	if (users.size == 2){
-		let id_g = 0;
-		for (let value of users) {
-			value.send("1_"+String(id_g)+"_1_1");
-			id_g++;
-		}
+ 
+  if (users.length < 2){
+	users.push(ws);
+	switch(users.length){
+		//отправляем код ноль, только один игрок подключился
+		case 1:
+			out_message.code = 0;
+			ws.send(JSON.stringify(out_message));
+			break;
+		//отправляем код 1, началтеый счёт и кто ходит, два игрока подключены можно начинать игру
+		case 2:
+			out_message.code = 1;
+			out_message.users_s = [1,1];
+			out_message.progress_id = 0;
+			users[0].send(JSON.stringify(out_message));
+			out_message.progress_id = 1;
+			users[1].send(JSON.stringify(out_message));
+			break;
 	}
-  }else{
-	ws.close(1000, "2");	
-  }
+  } else {
+	//отправляем код 2, уже достаточно игроков
+	out_message.code = 2;
+	ws.close(1000, JSON.stringify(out_message));
+  };
+  
   ws.on('message', function(message) {
-    let dat = parser.par_i(message);
-	if (Number(dat[0])>=41){
-		let ws1;
-		for (let value of users) {
-			if (value != ws){ws1=value;}
-		}
-		users.clear();
-		ws.close(1000,"4_0");
-		ws1.close(1000,"4_1");
-	}else{
-	ws.send('1_1_'+message);
-	for (let value of users) {
-			if (value != ws){value.send('1_0_'+dat[1]+'_'+dat[0]);}
-		}
-	}
+	  //получили сообщение от пользователя заканчиваем его игру стартуем игру второго и смотит нет ли ещё победы
+	  message = JSON.parse(message);
+	  if (Number (message.users_s[0]) >= 41){
+		  let users_c = users;
+		  users = [];
+		  message.code = 4;
+		  message.win_id = 0;
+		  ws.close(1000, JSON.stringify(message));
+		  message.win_id = 1;
+		  users_c.remove(ws);
+		  users_c[0].close(1000, JSON.stringify(message));
+	  } else {
+		message.progress_id = 1;
+		ws.send(JSON.stringify(message));
+		message.progress_id = 0;
+		message.users_s = message.users_s.reverse()
+		if (users.indexOf(ws) == 0){
+		  users[1].send(JSON.stringify(message));
+		} else {
+		  users[0].send(JSON.stringify(message));
+		};
+	  }
   });
 
   ws.on('close', function() {
-	i = users.size;
-    users.delete(ws);
-	j = users.size;
-	if (i==2 && j==1){
-		for (let value of users) {
-			value.close(1000, "3");
-			users.delete(value);
+	    flag = users.includes(ws)
+		users.remove(ws);
+		if (users.length == 1 && flag){
+			//отправляем код 3, второй игрок отключился во время игры
+			out_message.code = 3;
+			users[0].close(1000, JSON.stringify(out_message));
 		}
-	}
 	});
 
 });

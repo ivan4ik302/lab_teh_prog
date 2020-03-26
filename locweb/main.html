@@ -40,21 +40,13 @@
 		return Math.round(rand);
 	}
 	
-	function par_i (string) {
-		let i = 0
-		let p_mas=[''];
-		for (let ch of string) {
-			if (ch=='_') {
-				if (p_mas[i]=='') {return null;}
-				p_mas.push('');
-				i++;
-			}else{
-				if (isFinite(p_mas[i])) {p_mas[i]+=ch;} else {return null;}
-			}
-		}
-		if (p_mas[i]=='') {return null;}
-		else {return p_mas;}
-	}
+	let out_message = {
+		users_s: [null,null],
+		progress_id: null,
+		win_id: null,
+		code: null	
+	};
+	
 	let r_int = new Set();
 	let socket = new WebSocket("ws://localhost:8081/");
     window.onload = function(){
@@ -71,45 +63,66 @@
 		}
 		
 		socket.onmessage = function(event) {
-			let dat = par_i(event.data);
-			if (dat[0] == 0) {stat_g.innerHTML = '<p style="color: red;">Второй пользователь не подключон</p>'}
-			if (dat[0] == 1) {
-				stat_g.innerHTML = '<p style="color: green;">Игра началась</p>';
-				score.style.visibility='visible';
-				m_score.innerHTML = dat[2];
-				e_score.innerHTML = dat[3];
-				if (dat[1] == 0) {stat_p.innerHTML = '<p style="color: green;">Ваш ход</p>';game.style.visibility='visible';}else{stat_p.innerHTML = '<p style="color: red;">Не ваш ход</p>';game.style.visibility='hidden';}
+			message = JSON.parse(event.data);
+			switch (message.code) {
+				//подключен только один игрок (код 0)
+				case 0:
+					stat_g.innerHTML = '<p style="color: red;">Второй пользователь не подключон</p>'
+					break;
+				//сама игра (код 1)
+				case 1:
+					stat_g.innerHTML = '<p style="color: green;">Игра началась</p>';
+					score.style.visibility='visible';
+					m_score.innerHTML = message.users_s[0];
+					e_score.innerHTML = message.users_s[1];
+					if (message.progress_id == 0) {
+						stat_p.innerHTML = '<p style="color: green;">Ваш ход</p>';
+						game.style.visibility='visible';
+					} else {
+						stat_p.innerHTML = '<p style="color: red;">Не ваш ход</p>';
+						game.style.visibility='hidden';
+					}
+					break;
 			}
 		};
 		socket.onclose = function(event) {
-		if (event.wasClean) {
-			if (event.reason=="2") {
-				stat_g.innerHTML = '<p style="color: red;">Уже есть двое игроков</p>'
-			}
-			if (event.reason=="3") {
-				stat_g.innerHTML = '<p style="color: red;">Второй игрок отключился</p>'
+			if (event.wasClean) {
+			    message = JSON.parse(event.reason);
+				switch (message.code) {
+					//есть уже два активных игрока (код 2)
+					case 2:
+						stat_g.innerHTML = '<p style="color: red;">Уже есть двое игроков</p>';
+						break;
+					//второй игрок отключился (код 3)
+					case 3:
+						stat_g.innerHTML = '<p style="color: red;">Второй игрок отключился</p>'
+						score.style.visibility='hidden';
+						game.style.visibility='hidden';
+						break;
+					case 4:
+						stat_g.innerHTML = '<p style="color: green;">Вы выйграли</p>'
+						score.style.visibility='hidden';
+						game.style.visibility='hidden';
+						if (message.win_id==0) {stat_g.innerHTML = '<p style="color: green;">Вы выйграли</p>';
+						} else {
+							stat_g.innerHTML = '<p style="color: red;">Вы проиграли</p>';
+						}
+						break;
+				};
+			} else {
+				stat_g.innerHTML = '<p style="color: red;">Проблема с сервером</p>';
 				score.style.visibility='hidden';
 				game.style.visibility='hidden';
 			}
-			let dat = par_i(event.reason);
-			if (dat[0]==4) {
-				stat_g.innerHTML = '<p style="color: green;">Вы выйграли</p>'
-				score.style.visibility='hidden';
-				game.style.visibility='hidden';
-				if (dat[1]==0) {stat_g.innerHTML = '<p style="color: green;">Вы выйграли</p>';}else{stat_g.innerHTML = '<p style="color: red;">Вы проиграли</p>';}
-			}
-		} else {
-			stat_g.innerHTML = '<p style="color: red;">Проблема с сервером</p>';
-			score.style.visibility='hidden';
-			game.style.visibility='hidden';
-		}
 		};
-    }
+    };
 	but.onclick = function() {
 		let id_o = s_o.selectedIndex;
 		let op = [x => Number(m_score.innerHTML) + x, x => Number(m_score.innerHTML) * x, x => Number(m_score.innerHTML) - x, x => pow(Number(m_score.innerHTML),x), x => Number(m_score.innerHTML) % x];
 		m_score.innerHTML = op[s_o.selectedIndex](Number(s_n.value));
-		socket.send(m_score.innerHTML+'_'+e_score.innerHTML);
+		out_message.users_s = [m_score.innerHTML,e_score.innerHTML];
+		out_message.code = 1;
+		socket.send(JSON.stringify(out_message));
 	}
   </script>
 </html>
